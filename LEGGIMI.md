@@ -45,7 +45,7 @@ Resta aperto in tutto schermo come un'app e si apre anche senza rete (ultimi dat
 - Gli orari dopo mezzanotte (fino alle 06:00) restano nella serata del giorno scelto.
 
 ## Note
-- Aree assegnate in automatico dal palinsesto: ScuolaZoo se il referente è "Staff ScuolaZoo"; Service per Plenary, Venue Setup, Entertainment; Logistica per Operation e Other. Si cambiano da ogni scheda.
+- Aree assegnate in automatico dal palinsesto: Odex se il referente è "Staff Odex"; Service per Plenary, Venue Setup, Entertainment; Logistica per Operation e Other. Si cambiano da ogni scheda.
 - Titoli troncati nel PDF originale da ricontrollare: "WeRoad goes USA: inside our American…" e "From day one to the IRL movement…".
 - I giorni 20–23 (pre-produzione) sono vuoti: il palinsesto parte dal 24.
 - Per pubblicare una nuova versione dell'app cambia `VERSION` in `sw.js` (es. `pp-v2`), altrimenti alcuni telefoni tengono la vecchia.

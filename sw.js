@@ -1,6 +1,6 @@
 /* Service worker: l'app si apre anche senza rete (utile in nave).
    Cambia VERSION quando pubblichi una nuova versione dell'app. */
-const VERSION = 'pp-v31';
+const VERSION = 'pp-v32';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', e => {
