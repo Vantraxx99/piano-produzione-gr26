@@ -545,7 +545,7 @@ input:disabled,select:disabled{opacity:.6;background:var(--surface-2)}
         <label class="f full">Titolo<input id="pd-t" autocomplete="off"></label>
         <label class="f full">Sottotitolo<input id="pd-s" autocomplete="off" placeholder="Es. Per gli artisti · versione 15 ottobre"></label>
         <label class="f">Contenuto<select id="pd-c"><option value="view">Solo il giorno scelto · con filtri</option><option value="days">Tutti i giorni · con filtri</option><option value="all">Tutto il piano · senza filtri</option></select></label>
-        <label class="f full">Impaginazione<select id="pd-l"><option value="plan">Piano di produzione</option><option value="mat">Lista materiali (materiali in grande)</option><option value="occ">Impegno location (orari per MSC)</option></select></label>
+        <label class="f full">Impaginazione<select id="pd-l"><option value="plan">Piano di produzione</option><option value="mat">Lista materiali (materiali in grande)</option><option value="occ">Impegno location (orari per MSC)</option><option value="tl">Timeline (un giorno per pagina, A3)</option></select></label>
         <label class="f">Raggruppa per<select id="pd-g"><option value="time">Giorno e orario</option><option value="loc">Giorno e location</option></select></label>
         <div class="full hint" id="pd-info" style="margin-top:0"></div>
         <div class="full"><div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">Colonne da mostrare</div>
@@ -1169,7 +1169,7 @@ function openPdf(){
   var tsel=Array.from(S.teams).filter(function(t){return t!=='Non assegnato';});
   $('#pd-t').value=art?'Lineup Artist & DJ':(tsel.length===1?'Piano di produzione · '+tsel[0]:(S.areas.size===1?'Piano di produzione · '+Array.from(S.areas)[0]:'Piano di produzione'));
   $('#pd-s').value='Global Reunion · Cruise Edition · MSC Orchestra';
-  $('#pd-c').value=S.day==='all'?'days':'view'; $('#pd-g').value=art?'loc':'time'; $('#pd-l').value=S.view==='materiali'?'mat':'plan'; $('#pd-l').onchange=function(){ if(this.value==='occ'){ $('#pd-t').value='Impegno location'; $('#pd-s').value='MSC Orchestra · Global Reunion Cruise Edition'; $('#pd-c').value='days'; pdInfo(); } else if(this.value==='mat'){ $('#pd-t').value='Lista materiali'; } }; if(S.view==='materiali'){ $('#pd-g').value='loc'; $('#pd-t').value='Lista materiali'+(tsel.length===1?' · '+tsel[0]:''); } pdInfo();
+  $('#pd-c').value=S.day==='all'?'days':'view'; $('#pd-g').value=art?'loc':'time'; $('#pd-l').value=S.view==='materiali'?'mat':'plan'; $('#pd-l').onchange=function(){ if(this.value==='occ'){ $('#pd-t').value='Impegno location'; $('#pd-s').value='MSC Orchestra · Global Reunion Cruise Edition'; $('#pd-c').value='days'; pdInfo(); } else if(this.value==='mat'){ $('#pd-t').value='Lista materiali'; } else if(this.value==='tl'){ $('#pd-t').value='Timeline'+(tsel.length===1?' · '+tsel[0]:''); } }; if(S.view==='timeline'){ $('#pd-l').value='tl'; $('#pd-t').value='Timeline'+(tsel.length===1?' · '+tsel[0]:''); } if(S.view==='materiali'){ $('#pd-g').value='loc'; $('#pd-t').value='Lista materiali'+(tsel.length===1?' · '+tsel[0]:''); } pdInfo();
   var on=art?{team:0,categoria:0,area:0,responsabile:1,materiali:0,fornitore:0,stato:0,note:1}:{area:1,team:1,responsabile:1,materiali:1,fornitore:0,stato:1,note:0};
   document.querySelectorAll('#pd-cols input').forEach(function(c){c.checked=!!on[c.value];});
   $('#pd-lr').checked=true; $('#pd-off').checked=false; $('#pd-e').hidden=true;
@@ -1183,7 +1183,7 @@ async function makePdf(opt){
   var list=(opt.scope==='all'?rows.slice():filtered(opt.scope==='days')).filter(function(r){return (opt.off||r.stato!=='Annullato')&&(opt.layout!=='mat'||r.materiali);}).sort(sortRows);
   if(!list.length&&opt.layout==='mat') throw new Error('Nessuna attività con materiali in questa vista');
   if(!list.length) throw new Error('Nessuna voce da esportare con questi filtri');
-  var doc=new JsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  var doc=new JsPDF({orientation:'landscape',unit:'mm',format:opt.layout==='tl'?'a3':'a4'});
   var W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=12;
   var BLUE=[40,106,216], LIME=[237,251,138], NAVY=[7,37,61], GREY=[94,112,137], LINE=[228,234,243];
   var logo=await imgData('icon-192.png');
@@ -1282,6 +1282,83 @@ async function makePdf(opt){
       });
       y+=4;
     });
+  } else if(opt.layout==='tl'){
+  // ---- timeline: un giorno per pagina, location in colonna, orari in verticale ----
+  var tdays=[]; list.forEach(function(r){ if(tdays.indexOf(r.giorno)<0) tdays.push(r.giorno); });
+  var GUT=14, MINCW=27, AW=W-2*M-GUT, PERPG=Math.max(1,Math.floor(AW/MINCW));
+  function tint(rgb,f){ return rgb.map(function(v){return Math.round(v+(255-v)*f);}); }
+  var firstPage=true;
+  tdays.forEach(function(d){
+    var x=DAYMAP[d], dl=list.filter(function(r){return r.giorno===d;});
+    var items=dl.map(function(r){var sp=span(r); return {r:r,s:sp[0],e:sp[1]};});
+    var minS=Math.min.apply(null,items.map(function(i){return i.s;})), maxE=Math.max.apply(null,items.map(function(i){return Math.max(i.e,i.s+30);}));
+    var sh=Math.floor(minS/60), eh=Math.max(sh+4,Math.ceil(maxE/60));
+    var by={}; items.forEach(function(it){var k=it.r.location||'Senza location'; (by[k]=by[k]||{name:k,items:[],first:1e9}).items.push(it); by[k].first=Math.min(by[k].first,it.s);});
+    var lcols=Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return a.first-b.first||a.name.localeCompare(b.name);});
+    lcols.forEach(function(c){ layoutLanes(c.items); });
+    var npg=Math.ceil(lcols.length/PERPG), per=Math.ceil(lcols.length/npg);
+    var cats=[]; dl.forEach(function(r){ if(r.area&&cats.indexOf(r.area)<0) cats.push(r.area); });
+    for(var pg=0;pg<npg;pg++){
+      var chunk=lcols.slice(pg*per,(pg+1)*per);
+      if(!firstPage){ doc.addPage(); }
+      var top=firstPage?46:22; firstPage=false;
+      // titolo giorno
+      doc.setFillColor.apply(doc,NAVY); doc.roundedRect(M,top,W-2*M,9,2,2,'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text(pt((x?(x.full+' '+x.n+' ottobre · '+x.lbl):d).toUpperCase()),M+4,top+6.2);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor.apply(doc,LIME);
+      doc.text(pt(dl.length+' voci · '+lcols.length+' location'+(npg>1?' · parte '+(pg+1)+' di '+npg:'')),W-M-4,top+6.2,{align:'right'});
+      // intestazioni colonne
+      var hy=top+12, HH=10, gy=hy+HH, LEG=9, gh=H-14-LEG-gy, hr=gh/(eh-sh), cw=AW/chunk.length, X0=M+GUT;
+      chunk.forEach(function(c,i){
+        var cx=X0+i*cw; doc.setFillColor(238,243,251); doc.rect(cx+.4,hy,cw-.8,HH-1,'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.6); doc.setTextColor.apply(doc,NAVY);
+        var ln=doc.splitTextToSize(pt(shortLoc(c.name)),cw-3).slice(0,2); doc.text(ln,cx+cw/2,hy+(ln.length>1?3.6:5.4),{align:'center'});
+      });
+      // griglia oraria
+      doc.setLineWidth(.15);
+      for(var h=sh;h<=eh;h++){
+        var yy=gy+(h-sh)*hr; doc.setDrawColor.apply(doc,h===24?[150,165,190]:LINE); doc.line(X0,yy,W-M,yy);
+        if(hr>9&&h<eh){ doc.setDrawColor(242,245,249); doc.line(X0,yy+hr/2,W-M,yy+hr/2); }
+        if(h<eh){ doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor.apply(doc,GREY); doc.text(pad(h%24)+':00',M+GUT-1.5,yy+2.6,{align:'right'}); }
+      }
+      doc.setDrawColor.apply(doc,LINE); doc.setLineWidth(.2);
+      for(var i=0;i<=chunk.length;i++){ var lx=X0+i*cw; doc.line(lx,gy,lx,gy+gh); }
+      // blocchi
+      chunk.forEach(function(c,i){
+        var cx=X0+i*cw;
+        c.items.forEach(function(it){
+          var r=it.r, bw=(cw-1.2)/it.n, bx=cx+.6+it.lane*bw, by=gy+(it.s-sh*60)/60*hr+.3, bh=Math.max(it.e-it.s,30)/60*hr-.6;
+          var col=hexRgb(areaColor(r.area)), off=r.stato==='Annullato';
+          doc.setFillColor.apply(doc,tint(col,off?.92:.8)); doc.setDrawColor.apply(doc,tint(col,.45)); doc.setLineWidth(.2);
+          doc.roundedRect(bx+.3,by,bw-.6,bh,.8,.8,'FD');
+          doc.setFillColor.apply(doc,off?[180,188,200]:col); doc.rect(bx+.3,by,1.1,bh,'F');
+          var tx=bx+2.2, tw=bw-3.2, yy=by+2.6, maxY=by+bh-.6;
+          if(tw<4||bh<2.5) return;
+          var fs=bw<14?5.6:6.4;
+          if(bh<9.5){ // blocco corto: orario e titolo su una riga
+            doc.setFont('helvetica','bold'); doc.setFontSize(fs); doc.setTextColor.apply(doc,off?[150,160,175]:NAVY);
+            var one=doc.splitTextToSize(pt(fmt(it.s)+' '+(r.attivita||'')),tw); var ly2=by+Math.min(bh/2+1.1,2.6);
+            doc.text(one[0]+(one.length>1?'...':''),tx,ly2);
+            if(bh>=6.2&&one.length>1){ doc.text(doc.splitTextToSize(one.slice(1).join(' '),tw)[0],tx,ly2+fs*.4); }
+            return;
+          }
+          doc.setFont('helvetica','normal'); doc.setFontSize(fs-.6); doc.setTextColor.apply(doc,off?[150,160,175]:GREY);
+          doc.text(pt(fmt(it.s)+'-'+fmt(it.e)+(off?' annullato':'')),tx,yy); yy+=fs*.42;
+          doc.setFont('helvetica','bold'); doc.setFontSize(fs); doc.setTextColor.apply(doc,off?[150,160,175]:NAVY);
+          var lines=doc.splitTextToSize(pt(r.attivita||''),tw);
+          for(var k=0;k<lines.length&&yy<=maxY;k++){ doc.text(lines[k],tx,yy); yy+=fs*.4; }
+          var who=r.responsabile||staffLabel(r.fornitore)||r.team;
+          if(who&&yy<=maxY){ doc.setFont('helvetica','normal'); doc.setFontSize(fs-.8); doc.setTextColor.apply(doc,GREY);
+            var wl=doc.splitTextToSize(pt(who),tw); for(var k=0;k<wl.length&&yy<=maxY;k++){ doc.text(wl[k],tx,yy); yy+=(fs-.8)*.4; } }
+        });
+      });
+      // legenda categorie
+      var lx=M, ly=H-14-LEG+5.5; doc.setFontSize(7.2);
+      cats.forEach(function(a){ var tw2=doc.getTextWidth(pt(a)); if(lx+tw2+8>W-M) return; doc.setFillColor.apply(doc,hexRgb(areaColor(a))); doc.roundedRect(lx,ly-2.6,3,3,.6,.6,'F');
+        doc.setFont('helvetica','normal'); doc.setTextColor.apply(doc,NAVY); doc.text(pt(a),lx+4.2,ly); lx+=tw2+10; });
+    }
+  });
   } else {
   // pagine successive: intestazione corta
   var pagesWithHeader={1:1};
@@ -1306,7 +1383,7 @@ async function makePdf(opt){
   });
   }
   // responsabili location (raggruppamento per orario)
-  if(opt.layout!=='occ'&&opt.lr&&opt.group==='time'){
+  if(opt.layout!=='occ'&&opt.layout!=='tl'&&opt.lr&&opt.group==='time'){
     var lrRows=[]; days.forEach(function(d){ var seen={}; list.forEach(function(r){ if(r.giorno===d&&r.location&&!seen[r.location]){seen[r.location]=1; var v=lrGet(d,r.location); if(v) lrRows.push([pt(DAYMAP[d]?DAYMAP[d].dow+' '+DAYMAP[d].n+' ott':d),pt(r.location),pt(v)]);} }); });
     if(lrRows.length){
       sectionTitle('Responsabili di location',null,NAVY);
@@ -1324,7 +1401,7 @@ async function makePdf(opt){
     doc.text(pt('WeRoad Global Reunion 2026 · Cruise Edition · aggiornato al '+when),M,H-5);
     doc.text(i+' / '+n,W-M,H-5,{align:'right'});
   }
-  var name=(pt(opt.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'piano')+(opt.scope==='view'&&S.day!=='all'?'-'+S.day:(opt.scope==='days'&&opt.layout!=='occ'?'-tutti-i-giorni':''))+'.pdf';
+  var name=(pt(opt.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'piano')+(opt.scope==='view'&&S.day!=='all'?'-'+S.day:(opt.scope==='days'&&opt.layout!=='occ'&&opt.layout!=='tl'?'-tutti-i-giorni':(opt.scope!=='view'&&opt.layout==='tl'?'-tutti-i-giorni':'')))+'.pdf';
   return {blob:doc.output('blob'),name:name};
 }
 async function shareOrDownload(blob,name,type){
@@ -1733,7 +1810,7 @@ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
   window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){try{r.update();}catch(e){}}).catch(function(){});});
 }
 /* aggiornamento automatico: se online c'è una versione nuova, l'app si ricarica da sola */
-var APP_V='pp-v32';
+var APP_V='pp-v33';
 function checkUpdate(){
   if(!/^https?:$/.test(location.protocol)) return;
   fetch('sw.js?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(t){
